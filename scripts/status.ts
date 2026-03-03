@@ -14,40 +14,9 @@
  */
 
 import { existsSync, readFileSync } from "fs";
+import { pathToFileURL } from "url";
 import { CONFIG_PATH, type AgentStorageConfig } from "./config.ts";
-
-// ---------------------------------------------------------------------------
-// Output helpers (mirrors setup.ts)
-// ---------------------------------------------------------------------------
-
-const c = {
-  reset: "\x1b[0m",
-  bold: "\x1b[1m",
-  dim: "\x1b[2m",
-  green: "\x1b[32m",
-  red: "\x1b[31m",
-  yellow: "\x1b[33m",
-  cyan: "\x1b[36m",
-  white: "\x1b[37m",
-  gray: "\x1b[90m",
-};
-
-const HR = c.gray + "─".repeat(72) + c.reset;
-
-function label(key: string, value: string) {
-  const pad = "  " + key.padEnd(14);
-  return `${c.gray}${pad}${c.reset}${value}`;
-}
-
-function ok(msg: string) {
-  return `${c.green}✅${c.reset}  ${msg}`;
-}
-function locked(msg: string) {
-  return `${c.yellow}🔒${c.reset}  ${msg}`;
-}
-function errLine(msg: string) {
-  return `${c.red}✗${c.reset}  ${msg}`;
-}
+import { c, errLine, HR, label, locked, ok } from "./outputHelpers.ts";
 
 // ---------------------------------------------------------------------------
 // Main
@@ -73,7 +42,26 @@ async function main() {
 
   let config: AgentStorageConfig;
   try {
-    config = JSON.parse(readFileSync(CONFIG_PATH, "utf-8")) as AgentStorageConfig;
+    const raw = JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
+    const isValid =
+      typeof raw === "object" &&
+      raw !== null &&
+      typeof (raw as Record<string, unknown>).baseUrl === "string" &&
+      typeof (raw as Record<string, unknown>).workspaceId === "string" &&
+      typeof (raw as Record<string, unknown>).workspaceName === "string" &&
+      typeof (raw as Record<string, unknown>).apiKey === "string" &&
+      typeof (raw as Record<string, unknown>).claimUrl === "string" &&
+      typeof (raw as Record<string, unknown>).createdAt === "string" &&
+      typeof (raw as Record<string, unknown>).expiresAt === "string";
+    if (!isValid) {
+      console.error(
+        errLine(
+          `Config at ${CONFIG_PATH} is missing required fields or has invalid types.`,
+        ),
+      );
+      process.exit(1);
+    }
+    config = raw as AgentStorageConfig;
   } catch {
     console.error(errLine(`Could not parse ${CONFIG_PATH} — file may be corrupted.`));
     process.exit(1);
@@ -134,7 +122,7 @@ async function main() {
   const isActive = whoami.workspaceStatus === "active";
   const expiresDate = new Date(expiresAt);
   const msLeft = expiresDate.getTime() - Date.now();
-  const daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
+  const daysLeft = msLeft > 0 ? Math.ceil(msLeft / (1000 * 60 * 60 * 24)) : null;
   const expiryStr = expiresDate.toLocaleDateString("en-CA");
 
   const statusColor = isActive ? c.green : c.yellow;
@@ -162,9 +150,8 @@ async function main() {
       console.log(`\n  ${c.red}✗  Claim window expired ${expiryStr} — workspace will be deleted soon.${c.reset}`);
       console.log(`  ${c.gray}Run \`npm run setup\` to start fresh.${c.reset}`);
     } else {
-      console.log(
-        `\n  ${c.bold}👤  Claim URL${c.reset} ${c.gray}(${daysLeft} day${daysLeft !== 1 ? "s" : ""} remaining — expires ${expiryStr}):${c.reset}`,
-      );
+      const dayCount = daysLeft ?? 0;
+      console.log(`\n  ${c.bold}👤  Claim URL${c.reset} ${c.gray}(${dayCount} day${dayCount !== 1 ? "s" : ""} remaining — expires ${expiryStr}):${c.reset}`);
       console.log(`  ${c.cyan}${claimUrl}${c.reset}`);
     }
   } else {
@@ -174,7 +161,12 @@ async function main() {
   console.log("\n" + HR + "\n");
 }
 
-main().catch((e) => {
-  console.error(errLine(String(e)));
-  process.exit(1);
-});
+const isDirectRun =
+  !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isDirectRun) {
+  main().catch((e) => {
+    console.error(errLine(String(e)));
+    process.exit(1);
+  });
+}

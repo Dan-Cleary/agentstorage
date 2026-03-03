@@ -21,49 +21,16 @@
 import { existsSync, mkdirSync, writeFileSync, chmodSync } from "fs";
 import { pathToFileURL } from "url";
 import {
+  CLAIM_TTL_MS,
   CONFIG_DIR,
   CONFIG_PATH,
   type AgentStorageConfig,
 } from "./config.ts";
+import { c, errLine, HR, label, locked, ok } from "./outputHelpers.ts";
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
-
-const CLAIM_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-// ---------------------------------------------------------------------------
-// Output helpers
-// ---------------------------------------------------------------------------
-
-const c = {
-  reset: "\x1b[0m",
-  bold: "\x1b[1m",
-  dim: "\x1b[2m",
-  green: "\x1b[32m",
-  red: "\x1b[31m",
-  yellow: "\x1b[33m",
-  cyan: "\x1b[36m",
-  white: "\x1b[37m",
-  gray: "\x1b[90m",
-};
-
-const HR = c.gray + "─".repeat(72) + c.reset;
-
-function label(key: string, value: string, extra = "") {
-  const pad = "  " + key.padEnd(14);
-  return `${c.gray}${pad}${c.reset}${value}${extra ? c.gray + "  " + extra + c.reset : ""}`;
-}
-
-function ok(msg: string) {
-  return `${c.green}✅${c.reset}  ${msg}`;
-}
-function locked(msg: string) {
-  return `${c.yellow}🔒${c.reset}  ${msg}`;
-}
-function err(msg: string) {
-  return `${c.red}✗${c.reset}  ${msg}`;
-}
 
 // ---------------------------------------------------------------------------
 // Args
@@ -98,7 +65,7 @@ async function main() {
   // Validate base URL
   if (!base) {
     console.error(
-      err(
+      errLine(
         "No base URL provided.\n\n" +
           "  Usage: npx tsx scripts/setup.ts --base https://your-deploy.convex.site\n" +
           "  Or set: AGENTSTORAGE_URL=https://your-deploy.convex.site",
@@ -112,7 +79,7 @@ async function main() {
   // Check for existing config
   if (existsSync(CONFIG_PATH) && !force) {
     console.error(
-      err(`Config already exists at ${CONFIG_PATH}`) +
+      errLine(`Config already exists at ${CONFIG_PATH}`) +
         "\n\n" +
         c.gray +
         "  Run with --force to overwrite, or use `npm run status` to check the current workspace.\n" +
@@ -137,7 +104,7 @@ async function main() {
   } catch (e) {
     console.log(c.red + "✗" + c.reset);
     console.error(
-      err(
+      errLine(
         `Network error — is the deployment reachable?\n  ${e instanceof Error ? e.message : String(e)}`,
       ),
     );
@@ -148,7 +115,7 @@ async function main() {
     console.log(c.red + "✗" + c.reset);
     const body = await createRes.text();
     console.error(
-      err(`POST /v1/workspaces failed (HTTP ${createRes.status})\n  ${body}`),
+      errLine(`POST /v1/workspaces failed (HTTP ${createRes.status})\n  ${body}`),
     );
     process.exit(1);
   }
@@ -219,7 +186,7 @@ async function main() {
     console.log(c.green + "✓" + c.reset);
   } catch (e) {
     console.log(c.red + "✗" + c.reset);
-    console.error(err(`whoami failed: ${e instanceof Error ? e.message : String(e)}`));
+    console.error(errLine(`whoami failed: ${e instanceof Error ? e.message : String(e)}`));
     process.exit(1);
   }
 
@@ -264,7 +231,7 @@ const isDirectRun =
 
 if (isDirectRun) {
   main().catch((e) => {
-    console.error(err(String(e)));
+    console.error(errLine(String(e)));
     process.exit(1);
   });
 }

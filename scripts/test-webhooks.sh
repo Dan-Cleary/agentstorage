@@ -12,9 +12,26 @@
 # Usage: bash scripts/test-webhooks.sh
 set -euo pipefail
 
-BASE="${CONVEX_SITE_URL:-https://frugal-bobcat-636.convex.site}"
+: "${CONVEX_SITE_URL:?Set CONVEX_SITE_URL to your deployment URL (e.g. https://your-deploy.convex.site)}"
+BASE="${CONVEX_SITE_URL%/}"
 PASS=0
 FAIL=0
+WH_UUID=""
+WH2_UUID=""
+
+cleanup() {
+  if [ -n "${WH_UUID:-}" ]; then
+    curl -s -X DELETE "https://webhook.site/token/$WH_UUID" > /dev/null || true
+    log "Inbox 1 deleted"
+    WH_UUID=""
+  fi
+  if [ -n "${WH2_UUID:-}" ]; then
+    curl -s -X DELETE "https://webhook.site/token/$WH2_UUID" > /dev/null || true
+    log "Inbox 2 deleted"
+    WH2_UUID=""
+  fi
+}
+trap cleanup EXIT
 
 log()  { echo "  $*"; }
 ok()   { echo "  ✅ $*"; PASS=$((PASS+1)); }
@@ -67,7 +84,7 @@ ok "Webhook registered"
 # ── Step 4: Upload a test asset ───────────────────────────────────────────────
 echo ""
 echo "▶ Step 4: Uploading test asset to trigger asset.ready..."
-CONTENT_B64=$(echo -n "# Webhook test\n\nHello from the E2E test." | base64)
+CONTENT_B64=$(printf '# Webhook test\n\nHello from the E2E test.' | base64)
 UPLOAD_RESP=$(curl -s -X POST "$BASE/v1/assets/base64" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
@@ -322,14 +339,15 @@ for i in $(seq 1 15); do
   WEBHOOKS_LIST=$(curl -s -H "Authorization: Bearer $API_KEY2" "$BASE/v1/webhooks")
   BAD_LAST_ERR=$(echo "$WEBHOOKS_LIST" | python3 -c "
 import sys, json
+target_id = sys.argv[1]
 whs = json.load(sys.stdin).get('webhooks', [])
 for wh in whs:
-    if wh.get('id') == '${BAD_WH_ID}':
+    if wh.get('id') == target_id:
         print(wh.get('lastError') or '')
         break
 else:
     print('')
-" 2>/dev/null || echo "")
+" "$BAD_WH_ID" 2>/dev/null || echo "")
   if [ -n "$BAD_LAST_ERR" ] && [ "$BAD_LAST_ERR" != "None" ]; then
     log "Bad webhook failure recorded after $((i*2))s"
     break
@@ -339,14 +357,15 @@ done
 
 GOOD_LAST_ERR=$(echo "$WEBHOOKS_LIST" | python3 -c "
 import sys, json
+target_id = sys.argv[1]
 whs = json.load(sys.stdin).get('webhooks', [])
 for wh in whs:
-    if wh.get('id') == '${GOOD_WH_ID}':
+    if wh.get('id') == target_id:
         print(wh.get('lastError') or '')
         break
 else:
     print('')
-" 2>/dev/null || echo "")
+" "$GOOD_WH_ID" 2>/dev/null || echo "")
 
 log "Bad  webhook lastError: ${BAD_LAST_ERR:-<empty>}"
 log "Good webhook lastError: ${GOOD_LAST_ERR:-<empty>}"
@@ -376,8 +395,7 @@ log "Good endpoint: 1 successful delivery, 0 retries, 0 errors ← confirmed"
 # ── Cleanup ───────────────────────────────────────────────────────────────────
 echo ""
 echo "▶ Cleanup: deleting webhook.site inboxes..."
-curl -s -X DELETE "https://webhook.site/token/$WH_UUID"  > /dev/null && log "Inbox 1 deleted"
-curl -s -X DELETE "https://webhook.site/token/$WH2_UUID" > /dev/null && log "Inbox 2 deleted"
+cleanup
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""

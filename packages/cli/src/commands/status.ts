@@ -21,7 +21,26 @@ export async function runStatus(): Promise<void> {
 
   let config: AgentStorageConfig;
   try {
-    config = JSON.parse(readFileSync(CONFIG_PATH, "utf-8")) as AgentStorageConfig;
+    const raw = JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
+    const isValid =
+      typeof raw === "object" &&
+      raw !== null &&
+      typeof (raw as Record<string, unknown>).baseUrl === "string" &&
+      typeof (raw as Record<string, unknown>).workspaceId === "string" &&
+      typeof (raw as Record<string, unknown>).workspaceName === "string" &&
+      typeof (raw as Record<string, unknown>).apiKey === "string" &&
+      typeof (raw as Record<string, unknown>).claimUrl === "string" &&
+      typeof (raw as Record<string, unknown>).createdAt === "string" &&
+      typeof (raw as Record<string, unknown>).expiresAt === "string";
+    if (!isValid) {
+      console.error(
+        fail(
+          `Config at ${CONFIG_PATH} is missing required fields or has invalid types.`,
+        ),
+      );
+      process.exit(1);
+    }
+    config = raw as AgentStorageConfig;
   } catch {
     console.error(fail(`Could not parse ${CONFIG_PATH} — file may be corrupted.`));
     process.exit(1);
@@ -75,7 +94,7 @@ export async function runStatus(): Promise<void> {
   const isActive = whoami.workspaceStatus === "active";
   const expiresDate = new Date(expiresAt);
   const msLeft = expiresDate.getTime() - Date.now();
-  const daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
+  const daysLeft = msLeft > 0 ? Math.ceil(msLeft / (1000 * 60 * 60 * 24)) : null;
   const expiryStr = expiresDate.toLocaleDateString("en-CA");
   const statusColor = isActive ? c.green : c.yellow;
 
@@ -96,8 +115,9 @@ export async function runStatus(): Promise<void> {
       console.log(`\n  ${c.red}✗  Claim window expired ${expiryStr} — workspace will be deleted soon.${c.reset}`);
       console.log(`  ${c.gray}Run \`npx agentstorage setup\` to start fresh.${c.reset}`);
     } else {
+      const dayCount = daysLeft ?? 0;
       console.log(
-        `\n  ${c.bold}👤  Claim URL${c.reset} ${c.gray}(${daysLeft} day${daysLeft !== 1 ? "s" : ""} remaining — expires ${expiryStr}):${c.reset}`,
+        `\n  ${c.bold}👤  Claim URL${c.reset} ${c.gray}(${dayCount} day${dayCount !== 1 ? "s" : ""} remaining — expires ${expiryStr}):${c.reset}`,
       );
       console.log(`  ${c.cyan}${claimUrl}${c.reset}`);
     }

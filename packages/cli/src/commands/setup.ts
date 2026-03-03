@@ -13,6 +13,17 @@ interface SetupArgs {
   force: boolean;
 }
 
+class HttpError extends Error {
+  status: number;
+  body: string;
+
+  constructor(status: number, body: string) {
+    super(`HTTP_ERROR:${status}`);
+    this.status = status;
+    this.body = body;
+  }
+}
+
 export function parseSetupArgs(argv: string[]): SetupArgs {
   const get = (flag: string) => {
     const i = argv.indexOf(flag);
@@ -69,21 +80,45 @@ export async function runSetup(argv: string[]): Promise<void> {
       body: JSON.stringify({ name }),
     });
     if (!res.ok) {
-      throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+      throw new HttpError(res.status, await res.text());
     }
     created = (await res.json()) as typeof created;
     console.log(c.green + "✓" + c.reset);
   } catch (e) {
     console.log(c.red + "✗" + c.reset);
-    console.error(
-      fail(
-        `Network error — is the deployment reachable?\n  ${e instanceof Error ? e.message : String(e)}`,
-      ),
-    );
+    if (e instanceof HttpError) {
+      console.error(
+        fail(`POST /v1/workspaces failed (HTTP ${e.status})\n  ${e.body}`),
+      );
+    } else {
+      console.error(
+        fail(
+          `Network error — is the deployment reachable?\n  ${e instanceof Error ? e.message : String(e)}`,
+        ),
+      );
+    }
     process.exit(1);
   }
 
-  // ── Step 2: Write config ───────────────────────────────────────────────────
+  // ── Step 2: Verify with whoami ─────────────────────────────────────────────
+
+  process.stdout.write(`\n  ${c.gray}Running GET /v1/whoami ...${c.reset} `);
+
+  let whoami: { workspaceStatus: string };
+  try {
+    const res = await fetch(`${baseUrl}/v1/whoami`, {
+      headers: { Authorization: `Bearer ${created.apiKey}` },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    whoami = (await res.json()) as typeof whoami;
+    console.log(c.green + "✓" + c.reset);
+  } catch (e) {
+    console.log(c.red + "✗" + c.reset);
+    console.error(fail(`whoami failed: ${e instanceof Error ? e.message : String(e)}`));
+    process.exit(1);
+  }
+
+  // ── Step 3: Write config ───────────────────────────────────────────────────
 
   const now = new Date();
   const config: AgentStorageConfig = {
@@ -107,24 +142,6 @@ export async function runSetup(argv: string[]): Promise<void> {
   console.log("\n" + label("workspace", `${c.white}${name}${c.reset}`, `(${created.workspaceId})`));
   console.log(label("api key", `${c.cyan}${created.apiKey.slice(0, 12)}…${c.reset}`, "written once — not shown again"));
   console.log(label("config", CONFIG_PATH, "(mode 0600)"));
-
-  // ── Step 3: Verify with whoami ─────────────────────────────────────────────
-
-  process.stdout.write(`\n  ${c.gray}Running GET /v1/whoami ...${c.reset} `);
-
-  let whoami: { workspaceStatus: string };
-  try {
-    const res = await fetch(`${baseUrl}/v1/whoami`, {
-      headers: { Authorization: `Bearer ${created.apiKey}` },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-    whoami = (await res.json()) as typeof whoami;
-    console.log(c.green + "✓" + c.reset);
-  } catch (e) {
-    console.log(c.red + "✗" + c.reset);
-    console.error(fail(`whoami failed: ${e instanceof Error ? e.message : String(e)}`));
-    process.exit(1);
-  }
 
   // ── Step 4: Capability summary ─────────────────────────────────────────────
 

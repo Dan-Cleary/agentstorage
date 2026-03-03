@@ -76,10 +76,12 @@ paths:
                     type: string
                   prefixScopes:
                     type: array
+                    maxItems: 50
                     items:
                       type: string
                   allowedOps:
                     type: array
+                    maxItems: 50
                     items:
                       type: string
                   workspaceStatus:

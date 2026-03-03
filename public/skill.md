@@ -25,7 +25,7 @@ curl -fsSL https://<your-deployment>.convex.site/setup.sh | bash -s -- --name my
 Both paths write credentials to `~/.agentstorage/config.json` with mode `0600` and immediately verify the connection via `GET /v1/whoami`.
 
 Output of `npm run setup`:
-```
+```text
 AgentStorage — Setup
 ────────────────────────────────────────────────────────────────────────────────
   workspace      my-project  (abc123)
@@ -106,7 +106,7 @@ curl -s -X POST $BASE/v1/assets/$ASSET_ID/sign \
 
 ## Registration flow
 
-```
+```text
 POST /v1/workspaces   →  { workspaceId, apiKey, claimUrl }
                               ↓
                     agent works immediately (pre-claim)
@@ -156,9 +156,7 @@ Limits are enforced **per workspace**. All monthly counters reset on a rolling 3
 **Free:** Full API surface. Limits are hard-capped — no silent overages.  
 **Starter / Pro:** Same API, higher limits. Upgrade via the dashboard billing page.
 
-> **Transform counter** increments when a job is **enqueued**, not when it completes. This prevents spam. Check remaining quota with `GET /v1/usage`.
-
-> ⚠️ Unclaimed workspaces are hard-deleted after 7 days. Always surface `claimUrl` to a human promptly.
+> **Transform counter** increments when a job is **enqueued**, not when it completes. This prevents spam. Check remaining quota with `GET /v1/usage`. ⚠️ Unclaimed workspaces are hard-deleted after 7 days. Always surface `claimUrl` to a human promptly.
 
 ---
 
@@ -390,7 +388,7 @@ You can also pass `{"expiresInSeconds": null}` as an alias for `{"permanent": tr
 
 Signed URLs serve the asset **inline** by default — correct `Content-Type` is set, so images/PDFs/text render in the browser and are embeddable via `<img src="...">`. Append `?download=1` to force a file-save dialog:
 
-```
+```text
 GET /v1/dl/<token>            → inline (renders in browser, embeddable)
 GET /v1/dl/<token>?download=1 → attachment (Save As dialog)
 ```
@@ -430,12 +428,14 @@ curl -s $BASE/v1/transforms/$JOB_ID -H "Authorization: Bearer $API_KEY"
 `status`: `queued | running | completed | failed`
 
 **Params:**
+
 | Param | Default | Notes |
 |-------|---------|-------|
 | `maxWidth` | 1280 | Maximum output width in pixels. Images narrower than the target are never upscaled. |
 | `quality` | 85 | 1–100. Controls JPEG compression. Ignored for PNG output (lossless). |
 
 **Output format:**
+
 | Input | Output | Notes |
 |-------|--------|-------|
 | JPEG | JPEG | `quality` applied |

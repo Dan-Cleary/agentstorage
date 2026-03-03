@@ -1,6 +1,10 @@
 import { homedir } from "os";
 import { join } from "path";
 
+// NOTE: This config shape is intentionally duplicated in scripts/ and
+// packages/cli/src/. The scripts are standalone utilities and should not depend
+// on the CLI package at runtime. If dependencies are refactored later, these
+// can be consolidated into a shared module.
 export interface AgentStorageConfig {
   baseUrl: string;
   workspaceId: string;
