@@ -114,30 +114,7 @@ export async function runSetup(argv: string[]): Promise<void> {
     process.exit(1);
   }
 
-  // ── Step 2: Verify with whoami ─────────────────────────────────────────────
-
-  process.stdout.write(`\n  ${c.gray}Running GET /v1/whoami ...${c.reset} `);
-
-  let whoami: { workspaceStatus: string };
-  try {
-    const res = await fetch(`${baseUrl}/v1/whoami`, {
-      headers: { Authorization: `Bearer ${created.apiKey}` },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-    whoami = (await res.json()) as typeof whoami;
-    console.log(c.green + "✓" + c.reset);
-  } catch (e) {
-    console.log(c.red + "✗" + c.reset);
-    if (isTimeoutError(e)) {
-      console.error(fail(`GET /v1/whoami timed out after ${FETCH_TIMEOUT_MS}ms.`));
-    } else {
-      console.error(fail(`whoami failed: ${e instanceof Error ? e.message : String(e)}`));
-    }
-    process.exit(1);
-  }
-
-  // ── Step 3: Write config ───────────────────────────────────────────────────
+  // ── Step 2: Write config ───────────────────────────────────────────────────
 
   const now = new Date();
   const config: AgentStorageConfig = {
@@ -161,6 +138,37 @@ export async function runSetup(argv: string[]): Promise<void> {
   console.log("\n" + label("workspace", `${c.white}${name}${c.reset}`, `(${created.workspaceId})`));
   console.log(label("api key", `${c.cyan}${created.apiKey.slice(0, 12)}…${c.reset}`, "written once — not shown again"));
   console.log(label("config", CONFIG_PATH, "(mode 0600)"));
+
+  // ── Step 3: Verify with whoami ─────────────────────────────────────────────
+
+  process.stdout.write(`\n  ${c.gray}Running GET /v1/whoami ...${c.reset} `);
+
+  let whoami: { workspaceStatus: string };
+  try {
+    const res = await fetch(`${baseUrl}/v1/whoami`, {
+      headers: { Authorization: `Bearer ${created.apiKey}` },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    whoami = (await res.json()) as typeof whoami;
+    console.log(c.green + "✓" + c.reset);
+  } catch (e) {
+    console.log(c.red + "✗" + c.reset);
+    if (isTimeoutError(e)) {
+      console.error(
+        fail(
+          `GET /v1/whoami timed out after ${FETCH_TIMEOUT_MS}ms.\n  Credentials were saved to ${CONFIG_PATH}. Run \`agentstorage status\` to retry verification.`,
+        ),
+      );
+    } else {
+      console.error(
+        fail(
+          `whoami failed: ${e instanceof Error ? e.message : String(e)}\n  Credentials were saved to ${CONFIG_PATH}. Run \`agentstorage status\` to retry verification.`,
+        ),
+      );
+    }
+    process.exit(1);
+  }
 
   // ── Step 4: Capability summary ─────────────────────────────────────────────
 

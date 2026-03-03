@@ -22,7 +22,9 @@ npx agentstorage status
 curl -fsSL https://<your-deployment>.convex.site/setup.sh | bash -s -- --name my-project
 ```
 
-Both paths write credentials to `~/.agentstorage/config.json` with mode `0600` and immediately verify the connection via `GET /v1/whoami`.
+Both paths write credentials to `~/.agentstorage/config.json` with mode `0600` and then verify the connection via `GET /v1/whoami`.
+
+If verification times out or fails, credentials are still saved; run `npx agentstorage status` to retry connectivity checks without creating a new workspace.
 
 Output of `npx agentstorage setup`:
 ```text
