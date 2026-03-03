@@ -24,6 +24,12 @@ class HttpError extends Error {
   }
 }
 
+class InvalidPayloadError extends Error {
+  constructor(message: string) {
+    super(message);
+  }
+}
+
 const FETCH_TIMEOUT_MS = 30_000;
 
 function isTimeoutError(e: unknown): e is Error {
@@ -114,7 +120,9 @@ export async function runSetup(argv: string[]): Promise<void> {
     }
     const payload = await res.json();
     if (!isCreateWorkspacePayload(payload)) {
-      throw new Error("Invalid workspace creation response");
+      throw new InvalidPayloadError(
+        "POST /v1/workspaces returned an invalid payload.",
+      );
     }
     created = payload;
     console.log(c.green + "✓" + c.reset);
@@ -128,6 +136,8 @@ export async function runSetup(argv: string[]): Promise<void> {
       console.error(
         fail(`POST /v1/workspaces timed out after ${FETCH_TIMEOUT_MS}ms.`),
       );
+    } else if (e instanceof InvalidPayloadError) {
+      console.error(fail(e.message));
     } else {
       console.error(
         fail(
