@@ -14,8 +14,7 @@
  */
 
 import { existsSync, readFileSync } from "fs";
-import type { AgentStorageConfig } from "./setup.ts";
-import { CONFIG_PATH } from "./setup.ts";
+import { CONFIG_PATH, type AgentStorageConfig } from "./config.ts";
 
 // ---------------------------------------------------------------------------
 // Output helpers (mirrors setup.ts)

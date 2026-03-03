@@ -19,25 +19,16 @@
  */
 
 import { existsSync, mkdirSync, writeFileSync, chmodSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
+import { pathToFileURL } from "url";
+import {
+  CONFIG_DIR,
+  CONFIG_PATH,
+  type AgentStorageConfig,
+} from "./config.ts";
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
-
-export interface AgentStorageConfig {
-  baseUrl: string;
-  workspaceId: string;
-  workspaceName: string;
-  apiKey: string;
-  claimUrl: string;
-  createdAt: string;
-  expiresAt: string;
-}
-
-export const CONFIG_DIR = join(homedir(), ".agentstorage");
-export const CONFIG_PATH = join(CONFIG_DIR, "config.json");
 
 const CLAIM_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -268,7 +259,12 @@ async function main() {
   );
 }
 
-main().catch((e) => {
-  console.error(err(String(e)));
-  process.exit(1);
-});
+const isDirectRun =
+  !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isDirectRun) {
+  main().catch((e) => {
+    console.error(err(String(e)));
+    process.exit(1);
+  });
+}

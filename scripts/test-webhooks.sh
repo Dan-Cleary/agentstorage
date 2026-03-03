@@ -20,23 +20,6 @@ log()  { echo "  $*"; }
 ok()   { echo "  ✅ $*"; PASS=$((PASS+1)); }
 fail() { echo "  ❌ FAIL: $*"; FAIL=$((FAIL+1)); }
 
-# ── json helper ─────────────────────────────────────────────────────────────
-jq_or_python() {
-  local expr="$1" input="$2"
-  if command -v jq &>/dev/null; then
-    echo "$input" | jq -r "$expr" 2>/dev/null
-  else
-    python3 - "$expr" "$input" <<'PY'
-import sys, json
-expr, raw = sys.argv[1], sys.argv[2]
-d = json.loads(raw)
-# simple key extraction only
-key = expr.strip('.').strip('"')
-print(d.get(key, ""))
-PY
-  fi
-}
-
 echo ""
 echo "═══════════════════════════════════════════════"
 echo "  AgentStorage — Webhook E2E Test"
