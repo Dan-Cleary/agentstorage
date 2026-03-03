@@ -44,6 +44,28 @@ function isCreateWorkspacePayload(value: unknown): value is {
   );
 }
 
+function isWhoamiPayload(value: unknown): value is {
+  workspaceId: string;
+  keyId: string;
+  keyName: string;
+  prefixScopes: string[];
+  allowedOps: string[];
+  workspaceStatus: string;
+} {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.workspaceId === "string" &&
+    typeof v.keyId === "string" &&
+    typeof v.keyName === "string" &&
+    Array.isArray(v.prefixScopes) &&
+    v.prefixScopes.every((s) => typeof s === "string") &&
+    Array.isArray(v.allowedOps) &&
+    v.allowedOps.every((s) => typeof s === "string") &&
+    typeof v.workspaceStatus === "string"
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
@@ -226,7 +248,11 @@ async function main() {
     if (!whoamiRes.ok) {
       throw new Error(`HTTP ${whoamiRes.status}: ${await whoamiRes.text()}`);
     }
-    whoami = await whoamiRes.json() as typeof whoami;
+    const payload = await whoamiRes.json();
+    if (!isWhoamiPayload(payload)) {
+      throw new Error(`Invalid whoami response: ${JSON.stringify(payload)}`);
+    }
+    whoami = payload;
     console.log(c.green + "✓" + c.reset);
   } catch (e) {
     console.log(c.red + "✗" + c.reset);
@@ -261,8 +287,9 @@ async function main() {
     console.log(c.gray + "      sign · transform · key minting" + c.reset);
     console.log(c.gray + "      limits: 50 MB / 500 assets  →  10 GB / 100k after claim" + c.reset);
 
+    const dayLabel = daysLeft === 1 ? "day" : "days";
     console.log(
-      `\n  ${c.bold}👤  Claim URL${c.reset} ${c.gray}(${daysLeft} days — expires ${expiryStr}):${c.reset}`,
+      `\n  ${c.bold}👤  Claim URL${c.reset} ${c.gray}(${daysLeft} ${dayLabel} — expires ${expiryStr}):${c.reset}`,
     );
     console.log(`  ${c.cyan}${created.claimUrl}${c.reset}`);
     console.log(`\n  ${c.gray}Share this URL with a human to activate the workspace.${c.reset}`);

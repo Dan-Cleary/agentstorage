@@ -33,6 +33,26 @@ function isTimeoutError(e: unknown): e is Error {
   );
 }
 
+function isCreateWorkspacePayload(value: unknown): value is {
+  workspaceId: string;
+  apiKey: string;
+  claimUrl: string;
+} {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.workspaceId === "string" &&
+    typeof v.apiKey === "string" &&
+    typeof v.claimUrl === "string"
+  );
+}
+
+function isWhoamiPayload(value: unknown): value is { workspaceStatus: string } {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.workspaceStatus === "string";
+}
+
 export function parseSetupArgs(argv: string[]): SetupArgs {
   const get = (flag: string) => {
     const i = argv.indexOf(flag);
@@ -92,7 +112,11 @@ export async function runSetup(argv: string[]): Promise<void> {
     if (!res.ok) {
       throw new HttpError(res.status, await res.text());
     }
-    created = (await res.json()) as typeof created;
+    const payload = await res.json();
+    if (!isCreateWorkspacePayload(payload)) {
+      throw new Error("Invalid workspace creation response");
+    }
+    created = payload;
     console.log(c.green + "✓" + c.reset);
   } catch (e) {
     console.log(c.red + "✗" + c.reset);
@@ -150,7 +174,13 @@ export async function runSetup(argv: string[]): Promise<void> {
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-    whoami = (await res.json()) as typeof whoami;
+    const payload = await res.json();
+    if (!isWhoamiPayload(payload)) {
+      throw new Error(
+        `Invalid whoami response: ${JSON.stringify(payload)}`,
+      );
+    }
+    whoami = payload;
     console.log(c.green + "✓" + c.reset);
   } catch (e) {
     console.log(c.red + "✗" + c.reset);

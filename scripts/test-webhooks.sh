@@ -18,15 +18,30 @@ PASS=0
 FAIL=0
 WH_UUID=""
 WH2_UUID=""
+API_KEY=""
+API_KEY2=""
+WH_ID=""
+GOOD_WH_ID=""
+BAD_WH_ID=""
+ASSET_ID=""
+ASSET2_ID=""
+
+CURL_OPTS=(
+  --silent
+  --show-error
+  --connect-timeout 10
+  --max-time 30
+  --fail-with-body
+)
 
 cleanup() {
   if [ -n "${WH_UUID:-}" ]; then
-    curl -s -X DELETE "https://webhook.site/token/$WH_UUID" > /dev/null || true
+    curl_json -X DELETE "https://webhook.site/token/$WH_UUID" > /dev/null || true
     log "Inbox 1 deleted"
     WH_UUID=""
   fi
   if [ -n "${WH2_UUID:-}" ]; then
-    curl -s -X DELETE "https://webhook.site/token/$WH2_UUID" > /dev/null || true
+    curl_json -X DELETE "https://webhook.site/token/$WH2_UUID" > /dev/null || true
     log "Inbox 2 deleted"
     WH2_UUID=""
   fi
@@ -36,6 +51,7 @@ trap cleanup EXIT
 log()  { echo "  $*"; }
 ok()   { echo "  ✅ $*"; PASS=$((PASS+1)); }
 fail() { echo "  ❌ FAIL: $*"; FAIL=$((FAIL+1)); }
+curl_json() { curl "${CURL_OPTS[@]}" "$@"; }
 
 echo ""
 echo "═══════════════════════════════════════════════"
@@ -46,9 +62,13 @@ echo ""
 
 # ── Step 1: Create webhook.site inbox ───────────────────────────────────────
 echo "▶ Step 1: Creating webhook.site inbox..."
-TOKEN_RESP=$(curl -s -X POST "https://webhook.site/token" \
+TOKEN_RESP=$(curl_json -X POST "https://webhook.site/token" \
   -H "Content-Type: application/json" \
   -d '{"default_status": 200, "default_content": "ok", "default_content_type": "text/plain"}')
+if [ -z "$TOKEN_RESP" ]; then
+  fail "webhook.site token response empty"
+  exit 1
+fi
 WH_UUID=$(echo "$TOKEN_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['uuid'])")
 WH_INBOX_URL="https://webhook.site/${WH_UUID}"
 WH_API="https://webhook.site/token/${WH_UUID}/requests"
@@ -59,33 +79,33 @@ ok "Webhook.site inbox created"
 # ── Step 2: Create workspace ─────────────────────────────────────────────────
 echo ""
 echo "▶ Step 2: Creating test workspace..."
-WS_RESP=$(curl -s -X POST "$BASE/v1/workspaces" \
+WS_RESP=$(curl_json -X POST "$BASE/v1/workspaces" \
   -H "Content-Type: application/json" \
   -d '{"name":"webhook-e2e-test"}')
 API_KEY=$(echo "$WS_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['apiKey'])")
 WS_ID=$(echo "$WS_RESP"   | python3 -c "import sys,json; print(json.load(sys.stdin)['workspaceId'])")
 log "Workspace  : $WS_ID"
-log "API Key    : ${API_KEY:0:20}..."
+log "API Key    : <REDACTED>"
 ok "Workspace created"
 
 # ── Step 3: Register webhook ─────────────────────────────────────────────────
 echo ""
 echo "▶ Step 3: Registering webhook..."
-WH_RESP=$(curl -s -X POST "$BASE/v1/webhooks" \
+WH_RESP=$(curl_json -X POST "$BASE/v1/webhooks" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d "{\"url\": \"$WH_INBOX_URL\", \"events\": [\"asset.ready\"]}")
 WH_ID=$(echo "$WH_RESP"     | python3 -c "import sys,json; print(json.load(sys.stdin)['webhookId'])")
 WH_SECRET=$(echo "$WH_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['secret'])")
 log "Webhook ID : $WH_ID"
-log "Secret     : ${WH_SECRET:0:8}..."
+log "Secret     : <REDACTED>"
 ok "Webhook registered"
 
 # ── Step 4: Upload a test asset ───────────────────────────────────────────────
 echo ""
 echo "▶ Step 4: Uploading test asset to trigger asset.ready..."
 CONTENT_B64=$(printf '# Webhook test\n\nHello from the E2E test.' | base64)
-UPLOAD_RESP=$(curl -s -X POST "$BASE/v1/assets/base64" \
+UPLOAD_RESP=$(curl_json -X POST "$BASE/v1/assets/base64" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d "{
@@ -103,7 +123,7 @@ echo "▶ Step 5: Polling for webhook delivery (max 30 s)..."
 DELIVERY=""
 for i in $(seq 1 15); do
   sleep 2
-  REQS=$(curl -s "$WH_API?sorting=newest&per_page=5")
+  REQS=$(curl_json "$WH_API?sorting=newest&per_page=5")
   COUNT=$(echo "$REQS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('total', 0))")
   if [ "$COUNT" -gt 0 ]; then
     DELIVERY=$(echo "$REQS" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)['data'][0]))")
@@ -194,7 +214,12 @@ _hval() {
 import sys, json
 name, raw = sys.argv[1], sys.argv[2]
 h = json.loads(raw)
-v = h.get(name.lower()) or h.get(name) or ""
+target = name.lower()
+v = ""
+for k, candidate in h.items():
+    if str(k).lower() == target:
+        v = candidate
+        break
 if isinstance(v, list):
     v = v[0] if v else ""
 print(v)
@@ -260,7 +285,7 @@ echo ""
 echo "▶ Creating second workspace + two webhooks (good + bad)..."
 
 # Second workspace
-WS2_RESP=$(curl -s -X POST "$BASE/v1/workspaces" \
+WS2_RESP=$(curl_json -X POST "$BASE/v1/workspaces" \
   -H "Content-Type: application/json" \
   -d '{"name":"webhook-isolation-test"}')
 API_KEY2=$(echo "$WS2_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['apiKey'])")
@@ -268,9 +293,13 @@ WS2_ID=$(echo "$WS2_RESP"   | python3 -c "import sys,json; print(json.load(sys.s
 log "Workspace2 : $WS2_ID"
 
 # Good endpoint (fresh webhook.site inbox returns 200)
-TOKEN2_RESP=$(curl -s -X POST "https://webhook.site/token" \
+TOKEN2_RESP=$(curl_json -X POST "https://webhook.site/token" \
   -H "Content-Type: application/json" \
   -d '{"default_status": 200, "default_content": "ok", "default_content_type": "text/plain"}')
+if [ -z "$TOKEN2_RESP" ]; then
+  fail "second webhook.site token response empty"
+  exit 1
+fi
 WH2_UUID=$(echo "$TOKEN2_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['uuid'])")
 GOOD_URL="https://webhook.site/${WH2_UUID}"
 GOOD_API="https://webhook.site/token/${WH2_UUID}/requests"
@@ -281,13 +310,13 @@ BAD_URL="https://httpstat.us/500"
 log "Bad endpoint  : $BAD_URL (intentional HTTP 500)"
 
 # Register both webhooks on the same workspace/event
-GOOD_WH=$(curl -s -X POST "$BASE/v1/webhooks" \
+GOOD_WH=$(curl_json -X POST "$BASE/v1/webhooks" \
   -H "Authorization: Bearer $API_KEY2" \
   -H "Content-Type: application/json" \
   -d "{\"url\": \"$GOOD_URL\", \"events\": [\"asset.ready\"]}")
 GOOD_WH_ID=$(echo "$GOOD_WH" | python3 -c "import sys,json; print(json.load(sys.stdin)['webhookId'])")
 
-BAD_WH=$(curl -s -X POST "$BASE/v1/webhooks" \
+BAD_WH=$(curl_json -X POST "$BASE/v1/webhooks" \
   -H "Authorization: Bearer $API_KEY2" \
   -H "Content-Type: application/json" \
   -d "{\"url\": \"$BAD_URL\", \"events\": [\"asset.ready\"]}")
@@ -299,7 +328,7 @@ ok "Two webhooks registered"
 echo ""
 echo "▶ Uploading asset to trigger asset.ready on both endpoints..."
 CONTENT2_B64=$(python3 -c "import base64; print(base64.b64encode(b'isolation test').decode())")
-UPLOAD2=$(curl -s -X POST "$BASE/v1/assets/base64" \
+UPLOAD2=$(curl_json -X POST "$BASE/v1/assets/base64" \
   -H "Authorization: Bearer $API_KEY2" \
   -H "Content-Type: application/json" \
   -d "{\"path\": \"/isolation/test.txt\", \"mimeType\": \"text/plain\", \"data\": \"$CONTENT2_B64\"}")
@@ -312,7 +341,7 @@ echo "▶ Polling good endpoint (should get attempt=1 immediately, unblocked by 
 GOOD_DELIVERY=""
 for i in $(seq 1 15); do
   sleep 2
-  REQS2=$(curl -s "$GOOD_API?sorting=newest&per_page=5")
+  REQS2=$(curl_json "$GOOD_API?sorting=newest&per_page=5")
   COUNT2=$(echo "$REQS2" | python3 -c "import sys,json; print(json.load(sys.stdin).get('total', 0))")
   if [ "$COUNT2" -gt 0 ]; then
     GOOD_DELIVERY=$(echo "$REQS2" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)['data'][0]))")
@@ -340,13 +369,14 @@ BAD_LAST_ERR=""
 WEBHOOKS_LIST=""
 for i in $(seq 1 15); do
   sleep 2
-  WEBHOOKS_LIST=$(curl -s -H "Authorization: Bearer $API_KEY2" "$BASE/v1/webhooks")
+  WEBHOOKS_LIST=$(curl_json -H "Authorization: Bearer $API_KEY2" "$BASE/v1/webhooks")
   BAD_LAST_ERR=$(echo "$WEBHOOKS_LIST" | python3 -c "
 import sys, json
 target_id = sys.argv[1]
 whs = json.load(sys.stdin).get('webhooks', [])
 for wh in whs:
-    if wh.get('id') == target_id:
+    wid = wh.get('id') or wh.get('webhookId')
+    if wid == target_id:
         print(wh.get('lastError') or '')
         break
 else:
@@ -364,7 +394,8 @@ import sys, json
 target_id = sys.argv[1]
 whs = json.load(sys.stdin).get('webhooks', [])
 for wh in whs:
-    if wh.get('id') == target_id:
+    wid = wh.get('id') or wh.get('webhookId')
+    if wid == target_id:
         print(wh.get('lastError') or '')
         break
 else:
@@ -399,6 +430,21 @@ log "Good endpoint: 1 successful delivery, 0 retries, 0 errors ← confirmed"
 # ── Cleanup ───────────────────────────────────────────────────────────────────
 echo ""
 echo "▶ Cleanup: deleting webhook.site inboxes..."
+if [ -n "${WH_ID:-}" ] && [ -n "${API_KEY:-}" ]; then
+  curl_json -X DELETE -H "Authorization: Bearer $API_KEY" "$BASE/v1/webhooks/$WH_ID" > /dev/null || true
+fi
+if [ -n "${GOOD_WH_ID:-}" ] && [ -n "${API_KEY2:-}" ]; then
+  curl_json -X DELETE -H "Authorization: Bearer $API_KEY2" "$BASE/v1/webhooks/$GOOD_WH_ID" > /dev/null || true
+fi
+if [ -n "${BAD_WH_ID:-}" ] && [ -n "${API_KEY2:-}" ]; then
+  curl_json -X DELETE -H "Authorization: Bearer $API_KEY2" "$BASE/v1/webhooks/$BAD_WH_ID" > /dev/null || true
+fi
+if [ -n "${ASSET_ID:-}" ] && [ -n "${API_KEY:-}" ]; then
+  curl_json -X DELETE -H "Authorization: Bearer $API_KEY" "$BASE/v1/assets/$ASSET_ID" > /dev/null || true
+fi
+if [ -n "${ASSET2_ID:-}" ] && [ -n "${API_KEY2:-}" ]; then
+  curl_json -X DELETE -H "Authorization: Bearer $API_KEY2" "$BASE/v1/assets/$ASSET2_ID" > /dev/null || true
+fi
 cleanup
 
 # ── Summary ──────────────────────────────────────────────────────────────────

@@ -192,17 +192,25 @@ paths:
         content:
           application/json:
             schema:
-              type: object
               description: Set permanent=true for a non-expiring link; otherwise use expiresInSeconds.
-              properties:
-                expiresInSeconds:
-                  type: integer
-                  nullable: true
-                  minimum: 1
-                  maximum: 604800
-                permanent:
-                  type: boolean
-              additionalProperties: false
+              oneOf:
+                - type: object
+                  properties:
+                    permanent:
+                      type: boolean
+                      const: true
+                  required: [permanent]
+                  additionalProperties: false
+                - type: object
+                  properties:
+                    expiresInSeconds:
+                      type: integer
+                      minimum: 1
+                      maximum: 604800
+                    permanent:
+                      enum: [false, null]
+                  required: [expiresInSeconds]
+                  additionalProperties: false
       responses:
         "200":
           description: Signed link created
