@@ -1,0 +1,24 @@
+{
+  "name": "agentstorage",
+  "version": "0.1.0",
+  "description": "AgentStorage CLI — zero-install agent onboarding and workspace management",
+  "keywords": ["agentstorage", "agent", "storage", "cli"],
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "agentstorage": "./dist/index.js"
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.0",
+    "typescript": "~5.9.3"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

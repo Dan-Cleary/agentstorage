@@ -1,0 +1,312 @@
+openapi: 3.0.3
+info:
+  title: AgentStorage API
+  version: v1-beta
+  description: |
+    Public API contract draft for AgentStorage.
+    This spec is focused on the client surface and will be expanded over time.
+servers:
+  - url: https://your-deployment.convex.site
+    description: Production deployment
+security:
+  - bearerAuth: []
+paths:
+  /v1/healthz:
+    get:
+      summary: Health check
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  timestamp:
+                    type: number
+                required: [ok, timestamp]
+  /v1/workspaces:
+    post:
+      summary: Create workspace
+      security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workspaceId:
+                    type: string
+                  apiKey:
+                    type: string
+                  claimUrl:
+                    type: string
+                    format: uri
+                required: [workspaceId, apiKey, claimUrl]
+  /v1/whoami:
+    get:
+      summary: Inspect current API key identity
+      responses:
+        "200":
+          description: Key identity
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workspaceId:
+                    type: string
+                  keyId:
+                    type: string
+                  keyName:
+                    type: string
+                  prefixScopes:
+                    type: array
+                    maxItems: 50
+                    items:
+                      type: string
+                  allowedOps:
+                    type: array
+                    maxItems: 50
+                    items:
+                      type: string
+                  workspaceStatus:
+                    type: string
+                required:
+                  [workspaceId, keyId, keyName, prefixScopes, allowedOps, workspaceStatus]
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /v1/assets/base64:
+    post:
+      summary: Upload small asset inline (<= 2MB)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                path:
+                  type: string
+                mimeType:
+                  type: string
+                data:
+                  type: string
+                provenance:
+                  type: object
+                  additionalProperties: true
+              required: [path, mimeType, data]
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assetId:
+                    type: string
+                required: [assetId]
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /v1/assets:
+    get:
+      summary: List assets by prefix
+      parameters:
+        - in: query
+          name: prefix
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - in: query
+          name: cursor
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Asset page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assets:
+                    type: array
+                    maxItems: 100
+                    items:
+                      type: object
+                      additionalProperties: true
+                  nextCursor:
+                    type: string
+                    nullable: true
+                  isDone:
+                    type: boolean
+                required: [assets, nextCursor, isDone]
+  /v1/assets/{assetId}/sign:
+    post:
+      summary: Create signed download URL (claimed workspaces)
+      parameters:
+        - in: path
+          name: assetId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              description: Set permanent=true for a non-expiring link; otherwise use expiresInSeconds.
+              oneOf:
+                - type: object
+                  properties:
+                    permanent:
+                      type: boolean
+                      const: true
+                  required: [permanent]
+                  additionalProperties: false
+                - type: object
+                  properties:
+                    expiresInSeconds:
+                      type: integer
+                      minimum: 1
+                      maximum: 604800
+                    permanent:
+                      enum: [false, null]
+                  required: [expiresInSeconds]
+                  additionalProperties: false
+      responses:
+        "200":
+          description: Signed link created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signedUrl:
+                    type: string
+                    format: uri
+                  expiresAt:
+                    type: number
+                    nullable: true
+                required: [signedUrl]
+        "403":
+          description: Blocked pre-claim or insufficient permission
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /v1/search:
+    get:
+      summary: Search assets
+      parameters:
+        - in: query
+          name: q
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: glasses
+          required: false
+          schema:
+            type: boolean
+        - in: query
+          name: smile
+          required: false
+          schema:
+            type: boolean
+        - in: query
+          name: background
+          required: false
+          schema:
+            type: string
+            enum: [light, dark, transparent]
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - in: query
+          name: cursor
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assets:
+                    type: array
+                    maxItems: 100
+                    items:
+                      type: object
+                      additionalProperties: true
+                  nextCursor:
+                    type: string
+                    nullable: true
+                  isDone:
+                    type: boolean
+                required: [assets, nextCursor, isDone]
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API key
+  schemas:
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            retryable:
+              type: boolean
+          required: [code, message]
+      required: [error]
