@@ -168,6 +168,7 @@ paths:
                 properties:
                   assets:
                     type: array
+                    maxItems: 100
                     items:
                       type: object
                       additionalProperties: true
@@ -192,11 +193,16 @@ paths:
           application/json:
             schema:
               type: object
+              description: Set permanent=true for a non-expiring link; otherwise use expiresInSeconds.
               properties:
                 expiresInSeconds:
                   type: integer
+                  nullable: true
                   minimum: 1
                   maximum: 604800
+                permanent:
+                  type: boolean
+              additionalProperties: false
       responses:
         "200":
           description: Signed link created
@@ -227,6 +233,34 @@ paths:
           required: false
           schema:
             type: string
+        - in: query
+          name: glasses
+          required: false
+          schema:
+            type: boolean
+        - in: query
+          name: smile
+          required: false
+          schema:
+            type: boolean
+        - in: query
+          name: background
+          required: false
+          schema:
+            type: string
+            enum: [light, dark, transparent]
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - in: query
+          name: cursor
+          required: false
+          schema:
+            type: string
       responses:
         "200":
           description: Search results
@@ -237,6 +271,7 @@ paths:
                 properties:
                   assets:
                     type: array
+                    maxItems: 100
                     items:
                       type: object
                       additionalProperties: true

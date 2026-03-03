@@ -240,7 +240,11 @@ fi
 # Replay guard: timestamp should be within the last 2 minutes
 TS_OK=$(python3 - "$H_TIMESTAMP" <<'PY'
 import sys, time
-ts = int(sys.argv[1])
+try:
+    ts = int(sys.argv[1])
+except Exception:
+    print("too old: invalid")
+    raise SystemExit(0)
 drift = abs(time.time() * 1000 - ts)
 print("ok" if drift < 120_000 else f"too old: {drift:.0f}ms")
 PY

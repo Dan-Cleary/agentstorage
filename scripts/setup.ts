@@ -28,6 +28,22 @@ import {
 } from "./config.ts";
 import { c, errLine, HR, label, locked, ok } from "./outputHelpers.ts";
 
+const FETCH_TIMEOUT_MS = 15_000;
+
+function isCreateWorkspacePayload(value: unknown): value is {
+  workspaceId: string;
+  apiKey: string;
+  claimUrl: string;
+} {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.workspaceId === "string" &&
+    typeof v.apiKey === "string" &&
+    typeof v.claimUrl === "string"
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
@@ -96,13 +112,26 @@ async function main() {
 
   let createRes: Response;
   try {
-    createRes = await fetch(`${baseUrl}/v1/workspaces`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      createRes = await fetch(`${baseUrl}/v1/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
   } catch (e) {
     console.log(c.red + "✗" + c.reset);
+    if (e instanceof Error && e.name === "AbortError") {
+      console.error(
+        errLine(`POST /v1/workspaces timed out after ${FETCH_TIMEOUT_MS}ms.`),
+      );
+      process.exit(1);
+    }
     console.error(
       errLine(
         `Network error — is the deployment reachable?\n  ${e instanceof Error ? e.message : String(e)}`,
@@ -120,11 +149,17 @@ async function main() {
     process.exit(1);
   }
 
-  const created = (await createRes.json()) as {
-    workspaceId: string;
-    apiKey: string;
-    claimUrl: string;
-  };
+  const createdRaw = await createRes.json();
+  if (!isCreateWorkspacePayload(createdRaw)) {
+    console.log(c.red + "✗" + c.reset);
+    console.error(
+      errLine(
+        "POST /v1/workspaces returned an invalid payload (expected workspaceId, apiKey, claimUrl strings).",
+      ),
+    );
+    process.exit(1);
+  }
+  const created = createdRaw;
 
   console.log(c.green + "✓" + c.reset);
 
@@ -176,9 +211,18 @@ async function main() {
   };
 
   try {
-    const whoamiRes = await fetch(`${baseUrl}/v1/whoami`, {
-      headers: { Authorization: `Bearer ${created.apiKey}` },
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const whoamiRes = await (async () => {
+      try {
+        return await fetch(`${baseUrl}/v1/whoami`, {
+          headers: { Authorization: `Bearer ${created.apiKey}` },
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+    })();
     if (!whoamiRes.ok) {
       throw new Error(`HTTP ${whoamiRes.status}: ${await whoamiRes.text()}`);
     }
@@ -186,6 +230,12 @@ async function main() {
     console.log(c.green + "✓" + c.reset);
   } catch (e) {
     console.log(c.red + "✗" + c.reset);
+    if (e instanceof Error && e.name === "AbortError") {
+      console.error(
+        errLine(`GET /v1/whoami timed out after ${FETCH_TIMEOUT_MS}ms.`),
+      );
+      process.exit(1);
+    }
     console.error(errLine(`whoami failed: ${e instanceof Error ? e.message : String(e)}`));
     process.exit(1);
   }

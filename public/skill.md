@@ -24,7 +24,7 @@ curl -fsSL https://<your-deployment>.convex.site/setup.sh | bash -s -- --name my
 
 Both paths write credentials to `~/.agentstorage/config.json` with mode `0600` and immediately verify the connection via `GET /v1/whoami`.
 
-Output of `npm run setup`:
+Output of `npx agentstorage setup`:
 ```text
 AgentStorage — Setup
 ────────────────────────────────────────────────────────────────────────────────
@@ -42,7 +42,7 @@ AgentStorage — Setup
 🔒  Blocked until claimed
       sign · transform · key minting
 
-👤  Claim URL (7 days — expires 2026-03-02):
+👤  Claim URL (expires in 7 days):
       https://your-app.com/claim?token=clm_...&workspaceId=abc123
 
   Share this URL with a human to activate the workspace.
@@ -314,9 +314,7 @@ curl -s -X POST $BASE/v1/assets/$ASSET_ID/finalize \
 # → { "assetId": "...", "status": "ready" }
 ```
 
-> `sizeBytes` is **required** — supply the exact byte count of the uploaded file. The server uses this for storage accounting and to enforce plan limits. For Convex-native storage (dev), the server also cross-checks it against the stored blob metadata.
-
-> Supports `Idempotency-Key` on `POST /v1/assets`.
+> `sizeBytes` is **required** — supply the exact byte count of the uploaded file. The server uses this for storage accounting and to enforce plan limits. For Convex-native storage (dev), the server also cross-checks it against the stored blob metadata. Supports `Idempotency-Key` on `POST /v1/assets`.
 
 ---
 

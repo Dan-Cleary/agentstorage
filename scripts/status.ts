@@ -18,6 +18,8 @@ import { pathToFileURL } from "url";
 import { CONFIG_PATH, type AgentStorageConfig } from "./config.ts";
 import { c, errLine, HR, label, locked, ok } from "./outputHelpers.ts";
 
+const FETCH_TIMEOUT_MS = 10_000;
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -87,9 +89,18 @@ async function main() {
   };
 
   try {
-    const res = await fetch(`${baseUrl}/v1/whoami`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const res = await (async () => {
+      try {
+        return await fetch(`${baseUrl}/v1/whoami`, {
+          headers: { Authorization: `Bearer ${apiKey}` },
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+    })();
 
     if (res.status === 401) {
       console.log(c.red + "✗" + c.reset);
@@ -111,6 +122,12 @@ async function main() {
     console.log(c.green + "✓" + c.reset);
   } catch (e) {
     console.log(c.red + "✗" + c.reset);
+    if (e instanceof Error && e.name === "AbortError") {
+      console.error(
+        errLine(`GET /v1/whoami timed out after ${FETCH_TIMEOUT_MS}ms.`),
+      );
+      process.exit(1);
+    }
     console.error(
       errLine(`whoami failed: ${e instanceof Error ? e.message : String(e)}`),
     );

@@ -23,4 +23,4 @@ export function label(key: string, value: string, note = "") {
 
 export const ok     = (msg: string) => `${c.green}✅${c.reset}  ${msg}`;
 export const locked = (msg: string) => `${c.yellow}🔒${c.reset}  ${msg}`;
-export const fail   = (msg: string) => `${c.red}✗${c.reset}  ${msg}`;
+export const fail   = (msg: string) => `${c.red}❌${c.reset}  ${msg}`;

@@ -24,6 +24,15 @@ class HttpError extends Error {
   }
 }
 
+const FETCH_TIMEOUT_MS = 30_000;
+
+function isTimeoutError(e: unknown): e is Error {
+  return (
+    e instanceof Error &&
+    (e.name === "AbortError" || e.name === "TimeoutError")
+  );
+}
+
 export function parseSetupArgs(argv: string[]): SetupArgs {
   const get = (flag: string) => {
     const i = argv.indexOf(flag);
@@ -78,6 +87,7 @@ export async function runSetup(argv: string[]): Promise<void> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!res.ok) {
       throw new HttpError(res.status, await res.text());
@@ -89,6 +99,10 @@ export async function runSetup(argv: string[]): Promise<void> {
     if (e instanceof HttpError) {
       console.error(
         fail(`POST /v1/workspaces failed (HTTP ${e.status})\n  ${e.body}`),
+      );
+    } else if (isTimeoutError(e)) {
+      console.error(
+        fail(`POST /v1/workspaces timed out after ${FETCH_TIMEOUT_MS}ms.`),
       );
     } else {
       console.error(
@@ -108,13 +122,18 @@ export async function runSetup(argv: string[]): Promise<void> {
   try {
     const res = await fetch(`${baseUrl}/v1/whoami`, {
       headers: { Authorization: `Bearer ${created.apiKey}` },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
     whoami = (await res.json()) as typeof whoami;
     console.log(c.green + "✓" + c.reset);
   } catch (e) {
     console.log(c.red + "✗" + c.reset);
-    console.error(fail(`whoami failed: ${e instanceof Error ? e.message : String(e)}`));
+    if (isTimeoutError(e)) {
+      console.error(fail(`GET /v1/whoami timed out after ${FETCH_TIMEOUT_MS}ms.`));
+    } else {
+      console.error(fail(`whoami failed: ${e instanceof Error ? e.message : String(e)}`));
+    }
     process.exit(1);
   }
 
@@ -160,7 +179,8 @@ export async function runSetup(argv: string[]): Promise<void> {
     console.log("\n  " + locked("Blocked until claimed"));
     console.log(c.gray + "      sign · transform · key minting" + c.reset);
     console.log(c.gray + "      limits: 50 MB / 500 assets  →  10 GB / 100k after claim" + c.reset);
-    console.log(`\n  ${c.bold}👤  Claim URL${c.reset} ${c.gray}(${daysLeft} days — expires ${expiryStr}):${c.reset}`);
+    const dayLabel = daysLeft === 1 ? "day" : "days";
+    console.log(`\n  ${c.bold}👤  Claim URL${c.reset} ${c.gray}(${daysLeft} ${dayLabel} — expires ${expiryStr}):${c.reset}`);
     console.log(`  ${c.cyan}${created.claimUrl}${c.reset}`);
     console.log(`\n  ${c.gray}Share this URL with a human to activate the workspace.${c.reset}`);
   } else {
