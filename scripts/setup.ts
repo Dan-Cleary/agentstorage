@@ -1,0 +1,274 @@
+#!/usr/bin/env tsx
+
+/**
+ * AgentStorage Setup
+ *
+ * Single onboarding entrypoint for agents:
+ *   1. Creates a workspace via POST /v1/workspaces
+ *   2. Writes ~/.agentstorage/config.json with 0600 permissions
+ *   3. Immediately verifies the connection via GET /v1/whoami
+ *   4. Prints a clear summary of what's available vs. blocked
+ *
+ * Usage:
+ *   npx tsx scripts/setup.ts --base https://your-deploy.convex.site
+ *   npx tsx scripts/setup.ts --base https://your-deploy.convex.site --name my-project
+ *   npx tsx scripts/setup.ts --base https://your-deploy.convex.site --force  # overwrite existing config
+ *
+ *   # or set the env var:
+ *   AGENTSTORAGE_URL=https://your-deploy.convex.site npx tsx scripts/setup.ts
+ */
+
+import { existsSync, mkdirSync, writeFileSync, chmodSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
+
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+
+export interface AgentStorageConfig {
+  baseUrl: string;
+  workspaceId: string;
+  workspaceName: string;
+  apiKey: string;
+  claimUrl: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export const CONFIG_DIR = join(homedir(), ".agentstorage");
+export const CONFIG_PATH = join(CONFIG_DIR, "config.json");
+
+const CLAIM_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// ---------------------------------------------------------------------------
+// Output helpers
+// ---------------------------------------------------------------------------
+
+const c = {
+  reset: "\x1b[0m",
+  bold: "\x1b[1m",
+  dim: "\x1b[2m",
+  green: "\x1b[32m",
+  red: "\x1b[31m",
+  yellow: "\x1b[33m",
+  cyan: "\x1b[36m",
+  white: "\x1b[37m",
+  gray: "\x1b[90m",
+};
+
+const HR = c.gray + "─".repeat(72) + c.reset;
+
+function label(key: string, value: string, extra = "") {
+  const pad = "  " + key.padEnd(14);
+  return `${c.gray}${pad}${c.reset}${value}${extra ? c.gray + "  " + extra + c.reset : ""}`;
+}
+
+function ok(msg: string) {
+  return `${c.green}✅${c.reset}  ${msg}`;
+}
+function locked(msg: string) {
+  return `${c.yellow}🔒${c.reset}  ${msg}`;
+}
+function err(msg: string) {
+  return `${c.red}✗${c.reset}  ${msg}`;
+}
+
+// ---------------------------------------------------------------------------
+// Args
+// ---------------------------------------------------------------------------
+
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const get = (flag: string) => {
+    const i = args.indexOf(flag);
+    return i !== -1 && i + 1 < args.length ? args[i + 1] : undefined;
+  };
+  return {
+    base:
+      get("--base") ??
+      process.env.AGENTSTORAGE_URL ??
+      process.env.CONVEX_URL,
+    name: get("--name") ?? "default",
+    force: args.includes("--force"),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+async function main() {
+  const { base, name, force } = parseArgs();
+
+  console.log("\n" + c.bold + "AgentStorage — Setup" + c.reset);
+  console.log(HR + "\n");
+
+  // Validate base URL
+  if (!base) {
+    console.error(
+      err(
+        "No base URL provided.\n\n" +
+          "  Usage: npx tsx scripts/setup.ts --base https://your-deploy.convex.site\n" +
+          "  Or set: AGENTSTORAGE_URL=https://your-deploy.convex.site",
+      ),
+    );
+    process.exit(1);
+  }
+
+  const baseUrl = base.replace(/\/$/, "");
+
+  // Check for existing config
+  if (existsSync(CONFIG_PATH) && !force) {
+    console.error(
+      err(`Config already exists at ${CONFIG_PATH}`) +
+        "\n\n" +
+        c.gray +
+        "  Run with --force to overwrite, or use `npm run status` to check the current workspace.\n" +
+        c.reset,
+    );
+    process.exit(1);
+  }
+
+  // ── Step 1: Create workspace ─────────────────────────────────────────────
+
+  process.stdout.write(
+    `  ${c.gray}Calling POST /v1/workspaces ...${c.reset} `,
+  );
+
+  let createRes: Response;
+  try {
+    createRes = await fetch(`${baseUrl}/v1/workspaces`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+  } catch (e) {
+    console.log(c.red + "✗" + c.reset);
+    console.error(
+      err(
+        `Network error — is the deployment reachable?\n  ${e instanceof Error ? e.message : String(e)}`,
+      ),
+    );
+    process.exit(1);
+  }
+
+  if (!createRes.ok) {
+    console.log(c.red + "✗" + c.reset);
+    const body = await createRes.text();
+    console.error(
+      err(`POST /v1/workspaces failed (HTTP ${createRes.status})\n  ${body}`),
+    );
+    process.exit(1);
+  }
+
+  const created = (await createRes.json()) as {
+    workspaceId: string;
+    apiKey: string;
+    claimUrl: string;
+  };
+
+  console.log(c.green + "✓" + c.reset);
+
+  // ── Step 2: Write config ─────────────────────────────────────────────────
+
+  const now = new Date();
+  const config: AgentStorageConfig = {
+    baseUrl,
+    workspaceId: created.workspaceId,
+    workspaceName: name,
+    apiKey: created.apiKey,
+    claimUrl: created.claimUrl,
+    createdAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + CLAIM_TTL_MS).toISOString(),
+  };
+
+  mkdirSync(CONFIG_DIR, { recursive: true });
+  writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n", {
+    encoding: "utf-8",
+    flag: "w",
+    mode: 0o600,
+  });
+  // Ensure mode is set even if file existed (writeFileSync doesn't always apply mode on overwrite)
+  chmodSync(CONFIG_PATH, 0o600);
+
+  console.log("\n" + label("workspace", `${c.white}${name}${c.reset}`, `(${created.workspaceId})`));
+  console.log(
+    label(
+      "api key",
+      `${c.cyan}${created.apiKey.slice(0, 12)}…${c.reset}`,
+      "written once — not shown again",
+    ),
+  );
+  console.log(label("config", CONFIG_PATH, "(mode 0600)"));
+
+  // ── Step 3: Verify with whoami ───────────────────────────────────────────
+
+  process.stdout.write(
+    `\n  ${c.gray}Running GET /v1/whoami ...${c.reset} `,
+  );
+
+  let whoami: {
+    workspaceId: string;
+    keyId: string;
+    keyName: string;
+    prefixScopes: string[];
+    allowedOps: string[];
+    workspaceStatus: string;
+  };
+
+  try {
+    const whoamiRes = await fetch(`${baseUrl}/v1/whoami`, {
+      headers: { Authorization: `Bearer ${created.apiKey}` },
+    });
+    if (!whoamiRes.ok) {
+      throw new Error(`HTTP ${whoamiRes.status}: ${await whoamiRes.text()}`);
+    }
+    whoami = await whoamiRes.json() as typeof whoami;
+    console.log(c.green + "✓" + c.reset);
+  } catch (e) {
+    console.log(c.red + "✗" + c.reset);
+    console.error(err(`whoami failed: ${e instanceof Error ? e.message : String(e)}`));
+    process.exit(1);
+  }
+
+  // ── Step 4: Print capability summary ────────────────────────────────────
+
+  const isUnclaimed = whoami.workspaceStatus === "unclaimed";
+  const expiresAt = new Date(config.expiresAt);
+  const daysLeft = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  const expiryStr = expiresAt.toLocaleDateString("en-CA"); // YYYY-MM-DD
+
+  console.log("\n  " + label("connected", `${c.green}${baseUrl}${c.reset}`).trimStart());
+  console.log("  " + label("status", isUnclaimed
+    ? `${c.yellow}unclaimed${c.reset}`
+    : `${c.green}active${c.reset}`
+  ).trimStart());
+
+  console.log("\n  " + ok("Available now"));
+  console.log(c.gray + "      read · write · list · search · delete (own assets)" + c.reset);
+
+  if (isUnclaimed) {
+    console.log("\n  " + locked("Blocked until claimed"));
+    console.log(c.gray + "      sign · transform · key minting" + c.reset);
+    console.log(c.gray + "      limits: 50 MB / 500 assets  →  10 GB / 100k after claim" + c.reset);
+
+    console.log(
+      `\n  ${c.bold}👤  Claim URL${c.reset} ${c.gray}(${daysLeft} days — expires ${expiryStr}):${c.reset}`,
+    );
+    console.log(`  ${c.cyan}${created.claimUrl}${c.reset}`);
+    console.log(`\n  ${c.gray}Share this URL with a human to activate the workspace.${c.reset}`);
+  } else {
+    console.log("\n  " + ok("Full access — workspace is active"));
+  }
+
+  console.log("\n" + HR);
+  console.log(
+    `  Setup complete. Run ${c.cyan}npm run status${c.reset} at any time to recheck.\n`,
+  );
+}
+
+main().catch((e) => {
+  console.error(err(String(e)));
+  process.exit(1);
+});
