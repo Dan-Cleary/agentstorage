@@ -4,6 +4,24 @@ import { c, HR, label, ok, locked, fail } from "../output.js";
 
 const FETCH_TIMEOUT_MS = 10_000;
 
+function isWhoamiPayload(value: unknown): value is {
+  keyName: string;
+  prefixScopes: string[];
+  allowedOps: string[];
+  workspaceStatus: string;
+} {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.keyName === "string" &&
+    Array.isArray(v.prefixScopes) &&
+    v.prefixScopes.every((s) => typeof s === "string") &&
+    Array.isArray(v.allowedOps) &&
+    v.allowedOps.every((s) => typeof s === "string") &&
+    typeof v.workspaceStatus === "string"
+  );
+}
+
 export async function runStatus(): Promise<void> {
   console.log("\n" + c.bold + "AgentStorage — Status" + c.reset);
   console.log(HR + "\n");
@@ -84,7 +102,11 @@ export async function runStatus(): Promise<void> {
     }
 
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-    whoami = (await res.json()) as typeof whoami;
+    const payload = await res.json();
+    if (!isWhoamiPayload(payload)) {
+      throw new Error(`Invalid whoami response: ${JSON.stringify(payload)}`);
+    }
+    whoami = payload;
     console.log(c.green + "✓" + c.reset);
   } catch (e) {
     console.log(c.red + "✗" + c.reset);

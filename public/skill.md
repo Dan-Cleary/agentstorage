@@ -498,7 +498,6 @@ curl -s -X POST $BASE/v1/assets/append \
 Search assets by **caption text** and/or **tag filters**.
 
 > ⚠️ Search matches against the asset's `caption` field and structured `tags` — **not file paths or names**. Assets uploaded without a caption will not appear in text searches. Use `GET /v1/assets?prefix=...` to list assets by path.
-
 > **Scope:** Results are filtered to paths covered by the API key's `prefixScopes`. A key scoped to `/projects/alice/` will not see assets under `/projects/bob/`.
 
 ```bash
