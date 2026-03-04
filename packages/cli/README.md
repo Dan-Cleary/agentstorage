@@ -1,6 +1,6 @@
 # agentstorage
 
-Zero-install CLI for [AgentStorage](https://github.com/Dan-Cleary/agentstorage) — agent onboarding and workspace management.
+Zero-install CLI for [AgentStorage](https://github.com/yourusername/agentstorage) — agent onboarding and workspace management.
 
 ## Usage
 
@@ -23,7 +23,7 @@ npx agentstorage setup --base <URL> [--name <name>] [--force]
 
 Options:
   --base    Base URL of your AgentStorage deployment (required)
-            Also reads: AGENTSTORAGE_URL env var
+            Also reads: AGENTSTORAGE_URL, then CONVEX_URL env vars
   --name    Workspace name (default: "default")
   --force   Overwrite existing config
 ```

@@ -120,14 +120,21 @@ export async function runStatus(): Promise<void> {
 
   // ── Summary ────────────────────────────────────────────────────────────────
 
-  const isActive = whoami.workspaceStatus === "active";
+  const workspaceStatus = whoami.workspaceStatus;
+  const isUnclaimed = workspaceStatus === "unclaimed";
+  const isActive = workspaceStatus === "active";
   const expiresDate = new Date(expiresAt);
-  const msLeft = expiresDate.getTime() - Date.now();
+  const expiresTs = expiresDate.getTime();
+  if (!Number.isFinite(expiresTs)) {
+    console.error(fail(`Config at ${CONFIG_PATH} has invalid expiresAt: ${expiresAt}`));
+    process.exit(1);
+  }
+  const msLeft = expiresTs - Date.now();
   const daysLeft = msLeft > 0 ? Math.ceil(msLeft / (1000 * 60 * 60 * 24)) : null;
   const expiryStr = expiresDate.toLocaleDateString("en-CA");
   const statusColor = isActive ? c.green : c.yellow;
 
-  console.log("\n  " + label("status", `${statusColor}${whoami.workspaceStatus}${c.reset}`).trimStart());
+  console.log("\n  " + label("status", `${statusColor}${workspaceStatus}${c.reset}`).trimStart());
   console.log("  " + label("key name", whoami.keyName).trimStart());
   console.log("  " + label("scopes", whoami.prefixScopes.join(", ")).trimStart());
   console.log("  " + label("ops", whoami.allowedOps.join(" · ")).trimStart());
@@ -135,7 +142,7 @@ export async function runStatus(): Promise<void> {
   console.log("\n  " + ok("Available now"));
   console.log(c.gray + "      read · write · list · search · delete (own assets)" + c.reset);
 
-  if (!isActive) {
+  if (isUnclaimed) {
     console.log("\n  " + locked("Blocked until claimed"));
     console.log(c.gray + "      sign · transform · key minting" + c.reset);
     console.log(c.gray + "      limits: 50 MB / 500 assets  →  10 GB / 100k after claim" + c.reset);

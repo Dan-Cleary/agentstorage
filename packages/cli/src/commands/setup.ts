@@ -24,6 +24,13 @@ class HttpError extends Error {
   }
 }
 
+class InvalidPayloadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidPayloadError";
+  }
+}
+
 const FETCH_TIMEOUT_MS = 30_000;
 
 function isTimeoutError(e: unknown): e is Error {
@@ -114,7 +121,9 @@ export async function runSetup(argv: string[]): Promise<void> {
     }
     const payload = await res.json();
     if (!isCreateWorkspacePayload(payload)) {
-      throw new Error("Invalid workspace creation response");
+      throw new InvalidPayloadError(
+        "POST /v1/workspaces returned an invalid payload.",
+      );
     }
     created = payload;
     console.log(c.green + "✓" + c.reset);
@@ -122,12 +131,16 @@ export async function runSetup(argv: string[]): Promise<void> {
     console.log(c.red + "✗" + c.reset);
     if (e instanceof HttpError) {
       console.error(
-        fail(`POST /v1/workspaces failed (HTTP ${e.status})\n  ${e.body}`),
+        fail(
+          `POST /v1/workspaces failed (HTTP ${e.status})\n  ${e.body}`,
+        ),
       );
     } else if (isTimeoutError(e)) {
       console.error(
         fail(`POST /v1/workspaces timed out after ${FETCH_TIMEOUT_MS}ms.`),
       );
+    } else if (e instanceof InvalidPayloadError) {
+      console.error(fail(e.message));
     } else {
       console.error(
         fail(
@@ -202,13 +215,16 @@ export async function runSetup(argv: string[]): Promise<void> {
 
   // ── Step 4: Capability summary ─────────────────────────────────────────────
 
-  const isUnclaimed = whoami.workspaceStatus === "unclaimed";
+  const workspaceStatus = whoami.workspaceStatus;
+  const isUnclaimed = workspaceStatus === "unclaimed";
+  const isActive = workspaceStatus === "active";
   const expiresAt = new Date(config.expiresAt);
   const daysLeft = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   const expiryStr = expiresAt.toLocaleDateString("en-CA");
+  const statusColor = isActive ? c.green : c.yellow;
 
   console.log("\n  " + label("connected", `${c.green}${baseUrl}${c.reset}`).trimStart());
-  console.log("  " + label("status", isUnclaimed ? `${c.yellow}unclaimed${c.reset}` : `${c.green}active${c.reset}`).trimStart());
+  console.log("  " + label("status", `${statusColor}${workspaceStatus}${c.reset}`).trimStart());
 
   console.log("\n  " + ok("Available now"));
   console.log(c.gray + "      read · write · list · search · delete (own assets)" + c.reset);

@@ -17,30 +17,9 @@ import { existsSync, readFileSync } from "fs";
 import { pathToFileURL } from "url";
 import { CONFIG_PATH, type AgentStorageConfig } from "./config.ts";
 import { c, errLine, HR, label, locked, ok } from "./outputHelpers.ts";
+import { isWhoamiPayload, type WhoamiPayload } from "./whoamiPayload.ts";
 
 const FETCH_TIMEOUT_MS = 10_000;
-
-function isWhoamiPayload(value: unknown): value is {
-  workspaceId: string;
-  keyId: string;
-  keyName: string;
-  prefixScopes: string[];
-  allowedOps: string[];
-  workspaceStatus: string;
-} {
-  if (typeof value !== "object" || value === null) return false;
-  const v = value as Record<string, unknown>;
-  return (
-    typeof v.workspaceId === "string" &&
-    typeof v.keyId === "string" &&
-    typeof v.keyName === "string" &&
-    Array.isArray(v.prefixScopes) &&
-    v.prefixScopes.every((s) => typeof s === "string") &&
-    Array.isArray(v.allowedOps) &&
-    v.allowedOps.every((s) => typeof s === "string") &&
-    typeof v.workspaceStatus === "string"
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Main
@@ -101,14 +80,7 @@ async function main() {
 
   process.stdout.write(`\n  ${c.gray}Running GET /v1/whoami ...${c.reset} `);
 
-  let whoami: {
-    workspaceId: string;
-    keyId: string;
-    keyName: string;
-    prefixScopes: string[];
-    allowedOps: string[];
-    workspaceStatus: string;
-  };
+  let whoami: WhoamiPayload;
 
   try {
     const controller = new AbortController();
@@ -148,30 +120,38 @@ async function main() {
     console.log(c.green + "✓" + c.reset);
   } catch (e) {
     console.log(c.red + "✗" + c.reset);
+    const credsHint = `Credentials were saved to ${CONFIG_PATH}. Run \`agentstorage status\` to retry verification.`;
     if (e instanceof Error && e.name === "AbortError") {
       console.error(
-        errLine(`GET /v1/whoami timed out after ${FETCH_TIMEOUT_MS}ms.`),
+        errLine(`GET /v1/whoami timed out after ${FETCH_TIMEOUT_MS}ms.\n  ${credsHint}`),
       );
       process.exit(1);
     }
     console.error(
-      errLine(`whoami failed: ${e instanceof Error ? e.message : String(e)}`),
+      errLine(`whoami failed: ${e instanceof Error ? e.message : String(e)}\n  ${credsHint}`),
     );
     process.exit(1);
   }
 
   // ── Capability summary ───────────────────────────────────────────────────
 
-  const isActive = whoami.workspaceStatus === "active";
+  const workspaceStatus = whoami.workspaceStatus;
+  const isUnclaimed = workspaceStatus === "unclaimed";
+  const isActive = workspaceStatus === "active";
   const expiresDate = new Date(expiresAt);
-  const msLeft = expiresDate.getTime() - Date.now();
+  const expiresTs = expiresDate.getTime();
+  if (!Number.isFinite(expiresTs)) {
+    console.error(errLine(`Config at ${CONFIG_PATH} has invalid expiresAt: ${expiresAt}`));
+    process.exit(1);
+  }
+  const msLeft = expiresTs - Date.now();
   const daysLeft = msLeft > 0 ? Math.ceil(msLeft / (1000 * 60 * 60 * 24)) : null;
   const expiryStr = expiresDate.toLocaleDateString("en-CA");
 
   const statusColor = isActive ? c.green : c.yellow;
   console.log(
     "\n  " +
-      label("status", `${statusColor}${whoami.workspaceStatus}${c.reset}`).trimStart(),
+      label("status", `${statusColor}${workspaceStatus}${c.reset}`).trimStart(),
   );
   console.log("  " + label("key name", whoami.keyName).trimStart());
   console.log(
@@ -184,7 +164,7 @@ async function main() {
   console.log("\n  " + ok("Available now"));
   console.log(c.gray + "      read · write · list · search · delete (own assets)" + c.reset);
 
-  if (!isActive) {
+  if (isUnclaimed) {
     console.log("\n  " + locked("Blocked until claimed"));
     console.log(c.gray + "      sign · transform · key minting" + c.reset);
     console.log(c.gray + "      limits: 50 MB / 500 assets  →  10 GB / 100k after claim" + c.reset);

@@ -5,7 +5,6 @@ const color = (code: string) => (useColor ? code : "");
 export const c = {
   reset: color("\x1b[0m"),
   bold: color("\x1b[1m"),
-  dim: color("\x1b[2m"),
   green: color("\x1b[32m"),
   red: color("\x1b[31m"),
   yellow: color("\x1b[33m"),
