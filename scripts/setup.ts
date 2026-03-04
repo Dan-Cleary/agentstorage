@@ -280,6 +280,9 @@ async function main() {
     console.log(`\n  ${c.gray}Share this URL with a human to activate the workspace.${c.reset}`);
   } else if (isActive) {
     console.log("\n  " + ok("Full access — workspace is active"));
+  } else {
+    console.log(`\n  ${c.yellow}⚠  Workspace is ${workspaceStatus}.${c.reset}`);
+    console.log(c.gray + "      Access may be restricted until it returns to active." + c.reset);
   }
 
   console.log("\n" + HR);

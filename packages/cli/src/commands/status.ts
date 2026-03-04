@@ -157,8 +157,11 @@ export async function runStatus(): Promise<void> {
       );
       console.log(`  ${c.cyan}${claimUrl}${c.reset}`);
     }
-  } else {
+  } else if (isActive) {
     console.log("\n  " + ok("Full access — workspace is active"));
+  } else {
+    console.log(`\n  ${c.yellow}⚠  Workspace is ${workspaceStatus}.${c.reset}`);
+    console.log(c.gray + "      Access may be restricted until it returns to active." + c.reset);
   }
 
   console.log("\n" + HR + "\n");

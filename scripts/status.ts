@@ -120,7 +120,9 @@ async function main() {
     console.log(c.green + "✓" + c.reset);
   } catch (e) {
     console.log(c.red + "✗" + c.reset);
-    const credsHint = `Credentials were saved to ${CONFIG_PATH}. Run \`agentstorage status\` to retry verification.`;
+    const credsHint =
+      `Using credentials from ${CONFIG_PATH}.\n` +
+      "  Check network/base URL, or run `npm run setup` to refresh credentials.";
     if (e instanceof Error && e.name === "AbortError") {
       console.error(
         errLine(`GET /v1/whoami timed out after ${FETCH_TIMEOUT_MS}ms.\n  ${credsHint}`),
@@ -177,8 +179,11 @@ async function main() {
       console.log(`\n  ${c.bold}👤  Claim URL${c.reset} ${c.gray}(${dayCount} day${dayCount !== 1 ? "s" : ""} remaining — expires ${expiryStr}):${c.reset}`);
       console.log(`  ${c.cyan}${claimUrl}${c.reset}`);
     }
-  } else {
+  } else if (isActive) {
     console.log("\n  " + ok("Full access — workspace is active"));
+  } else {
+    console.log(`\n  ${c.yellow}⚠  Workspace is ${workspaceStatus}.${c.reset}`);
+    console.log(c.gray + "      Access may be restricted until it returns to active." + c.reset);
   }
 
   console.log("\n" + HR + "\n");
