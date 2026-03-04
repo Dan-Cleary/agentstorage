@@ -27,6 +27,11 @@ import {
   type AgentStorageConfig,
 } from "./config.ts";
 import { c, errLine, HR, label, locked, ok } from "./outputHelpers.ts";
+import { isWhoamiPayload, type WhoamiPayload } from "./whoamiPayload.ts";
+
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
 
 const FETCH_TIMEOUT_MS = 15_000;
 
@@ -44,32 +49,6 @@ function isCreateWorkspacePayload(value: unknown): value is {
   );
 }
 
-function isWhoamiPayload(value: unknown): value is {
-  workspaceId: string;
-  keyId: string;
-  keyName: string;
-  prefixScopes: string[];
-  allowedOps: string[];
-  workspaceStatus: string;
-} {
-  if (typeof value !== "object" || value === null) return false;
-  const v = value as Record<string, unknown>;
-  return (
-    typeof v.workspaceId === "string" &&
-    typeof v.keyId === "string" &&
-    typeof v.keyName === "string" &&
-    Array.isArray(v.prefixScopes) &&
-    v.prefixScopes.every((s) => typeof s === "string") &&
-    Array.isArray(v.allowedOps) &&
-    v.allowedOps.every((s) => typeof s === "string") &&
-    typeof v.workspaceStatus === "string"
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Config
-// ---------------------------------------------------------------------------
-
 // ---------------------------------------------------------------------------
 // Args
 // ---------------------------------------------------------------------------
@@ -78,14 +57,21 @@ function parseArgs() {
   const args = process.argv.slice(2);
   const get = (flag: string) => {
     const i = args.indexOf(flag);
-    return i !== -1 && i + 1 < args.length ? args[i + 1] : undefined;
+    if (i === -1 || i + 1 >= args.length) return undefined;
+    const value = args[i + 1];
+    return value.startsWith("--") ? undefined : value;
   };
+  const base = get("--base") ?? process.env.AGENTSTORAGE_URL ?? process.env.CONVEX_URL;
+  const name = get("--name") ?? "default";
+  if (args.includes("--base") && !get("--base")) {
+    throw new Error("Missing value for --base");
+  }
+  if (args.includes("--name") && !get("--name")) {
+    throw new Error("Missing value for --name");
+  }
   return {
-    base:
-      get("--base") ??
-      process.env.AGENTSTORAGE_URL ??
-      process.env.CONVEX_URL,
-    name: get("--name") ?? "default",
+    base,
+    name,
     force: args.includes("--force"),
   };
 }
@@ -223,14 +209,7 @@ async function main() {
     `\n  ${c.gray}Running GET /v1/whoami ...${c.reset} `,
   );
 
-  let whoami: {
-    workspaceId: string;
-    keyId: string;
-    keyName: string;
-    prefixScopes: string[];
-    allowedOps: string[];
-    workspaceStatus: string;
-  };
+  let whoami: WhoamiPayload;
 
   try {
     const controller = new AbortController();
@@ -258,26 +237,32 @@ async function main() {
     console.log(c.red + "✗" + c.reset);
     if (e instanceof Error && e.name === "AbortError") {
       console.error(
-        errLine(`GET /v1/whoami timed out after ${FETCH_TIMEOUT_MS}ms.`),
+        errLine(
+          `GET /v1/whoami timed out after ${FETCH_TIMEOUT_MS}ms.\n  Credentials were saved to ${CONFIG_PATH}. Run \`npm run status\` to retry verification.`,
+        ),
       );
       process.exit(1);
     }
-    console.error(errLine(`whoami failed: ${e instanceof Error ? e.message : String(e)}`));
+    console.error(
+      errLine(
+        `whoami failed: ${e instanceof Error ? e.message : String(e)}\n  Credentials were saved to ${CONFIG_PATH}. Run \`npm run status\` to retry verification.`,
+      ),
+    );
     process.exit(1);
   }
 
   // ── Step 4: Print capability summary ────────────────────────────────────
 
-  const isUnclaimed = whoami.workspaceStatus === "unclaimed";
+  const workspaceStatus = whoami.workspaceStatus;
+  const isUnclaimed = workspaceStatus === "unclaimed";
+  const isActive = workspaceStatus === "active";
   const expiresAt = new Date(config.expiresAt);
   const daysLeft = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   const expiryStr = expiresAt.toLocaleDateString("en-CA"); // YYYY-MM-DD
+  const statusColor = isActive ? c.green : c.yellow;
 
   console.log("\n  " + label("connected", `${c.green}${baseUrl}${c.reset}`).trimStart());
-  console.log("  " + label("status", isUnclaimed
-    ? `${c.yellow}unclaimed${c.reset}`
-    : `${c.green}active${c.reset}`
-  ).trimStart());
+  console.log("  " + label("status", `${statusColor}${workspaceStatus}${c.reset}`).trimStart());
 
   console.log("\n  " + ok("Available now"));
   console.log(c.gray + "      read · write · list · search · delete (own assets)" + c.reset);
@@ -293,8 +278,11 @@ async function main() {
     );
     console.log(`  ${c.cyan}${created.claimUrl}${c.reset}`);
     console.log(`\n  ${c.gray}Share this URL with a human to activate the workspace.${c.reset}`);
-  } else {
+  } else if (isActive) {
     console.log("\n  " + ok("Full access — workspace is active"));
+  } else {
+    console.log(`\n  ${c.yellow}⚠  Workspace is ${workspaceStatus}.${c.reset}`);
+    console.log(c.gray + "      Access may be restricted until it returns to active." + c.reset);
   }
 
   console.log("\n" + HR);

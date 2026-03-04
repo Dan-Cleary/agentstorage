@@ -27,6 +27,7 @@ class HttpError extends Error {
 class InvalidPayloadError extends Error {
   constructor(message: string) {
     super(message);
+    this.name = "InvalidPayloadError";
   }
 }
 
@@ -62,14 +63,21 @@ function isWhoamiPayload(value: unknown): value is { workspaceStatus: string } {
 export function parseSetupArgs(argv: string[]): SetupArgs {
   const get = (flag: string) => {
     const i = argv.indexOf(flag);
-    return i !== -1 && i + 1 < argv.length ? argv[i + 1] : undefined;
+    if (i === -1 || i + 1 >= argv.length) return undefined;
+    const value = argv[i + 1];
+    return value.startsWith("--") ? undefined : value;
   };
+  const base = get("--base") ?? process.env.AGENTSTORAGE_URL ?? process.env.CONVEX_URL;
+  const name = get("--name") ?? "default";
+  if (argv.includes("--base") && !get("--base")) {
+    throw new Error("Missing value for --base");
+  }
+  if (argv.includes("--name") && !get("--name")) {
+    throw new Error("Missing value for --name");
+  }
   return {
-    base:
-      get("--base") ??
-      process.env.AGENTSTORAGE_URL ??
-      process.env.CONVEX_URL,
-    name: get("--name") ?? "default",
+    base,
+    name,
     force: argv.includes("--force"),
   };
 }
@@ -130,7 +138,9 @@ export async function runSetup(argv: string[]): Promise<void> {
     console.log(c.red + "✗" + c.reset);
     if (e instanceof HttpError) {
       console.error(
-        fail(`POST /v1/workspaces failed (HTTP ${e.status})\n  ${e.body}`),
+        fail(
+          `POST /v1/workspaces failed (HTTP ${e.status})\n  ${e.body}`,
+        ),
       );
     } else if (isTimeoutError(e)) {
       console.error(
@@ -212,13 +222,16 @@ export async function runSetup(argv: string[]): Promise<void> {
 
   // ── Step 4: Capability summary ─────────────────────────────────────────────
 
-  const isUnclaimed = whoami.workspaceStatus === "unclaimed";
+  const workspaceStatus = whoami.workspaceStatus;
+  const isUnclaimed = workspaceStatus === "unclaimed";
+  const isActive = workspaceStatus === "active";
   const expiresAt = new Date(config.expiresAt);
   const daysLeft = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   const expiryStr = expiresAt.toLocaleDateString("en-CA");
+  const statusColor = isActive ? c.green : c.yellow;
 
   console.log("\n  " + label("connected", `${c.green}${baseUrl}${c.reset}`).trimStart());
-  console.log("  " + label("status", isUnclaimed ? `${c.yellow}unclaimed${c.reset}` : `${c.green}active${c.reset}`).trimStart());
+  console.log("  " + label("status", `${statusColor}${workspaceStatus}${c.reset}`).trimStart());
 
   console.log("\n  " + ok("Available now"));
   console.log(c.gray + "      read · write · list · search · delete (own assets)" + c.reset);
@@ -231,8 +244,11 @@ export async function runSetup(argv: string[]): Promise<void> {
     console.log(`\n  ${c.bold}👤  Claim URL${c.reset} ${c.gray}(${daysLeft} ${dayLabel} — expires ${expiryStr}):${c.reset}`);
     console.log(`  ${c.cyan}${created.claimUrl}${c.reset}`);
     console.log(`\n  ${c.gray}Share this URL with a human to activate the workspace.${c.reset}`);
-  } else {
+  } else if (isActive) {
     console.log("\n  " + ok("Full access — workspace is active"));
+  } else {
+    console.log(`\n  ${c.yellow}⚠  Workspace is ${workspaceStatus}.${c.reset}`);
+    console.log(c.gray + "      Access may be restricted until it returns to active." + c.reset);
   }
 
   console.log("\n" + HR);

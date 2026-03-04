@@ -14,6 +14,7 @@ paths:
   /v1/healthz:
     get:
       summary: Health check
+      # checkov:skip=CKV_OPENAPI_5: Intentionally public endpoint
       security: []
       responses:
         "200":
@@ -31,6 +32,7 @@ paths:
   /v1/workspaces:
     post:
       summary: Create workspace
+      # checkov:skip=CKV_OPENAPI_5: Open registration for agent onboarding
       security: []
       requestBody:
         required: false
@@ -110,6 +112,7 @@ paths:
                   type: string
                 data:
                   type: string
+                  format: byte
                 provenance:
                   type: object
                   additionalProperties: true
@@ -178,6 +181,12 @@ paths:
                   isDone:
                     type: boolean
                 required: [assets, nextCursor, isDone]
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
   /v1/assets/{assetId}/sign:
     post:
       summary: Create signed download URL (claimed workspaces)
@@ -209,8 +218,8 @@ paths:
                       maximum: 604800
                     permanent:
                       type: boolean
-                      enum: [false]
                       nullable: true
+                      enum: [false, null]
                   required: [expiresInSeconds]
                   additionalProperties: false
       responses:
@@ -228,6 +237,12 @@ paths:
                     type: number
                     nullable: true
                 required: [signedUrl]
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "403":
           description: Blocked pre-claim or insufficient permission
           content:
@@ -291,6 +306,12 @@ paths:
                   isDone:
                     type: boolean
                 required: [assets, nextCursor, isDone]
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 components:
   securitySchemes:
     bearerAuth:
