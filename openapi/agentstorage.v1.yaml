@@ -112,6 +112,7 @@ paths:
                   type: string
                 data:
                   type: string
+                  format: byte
                 provenance:
                   type: object
                   additionalProperties: true

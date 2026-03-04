@@ -18,7 +18,7 @@ npx agentstorage status
 
 Creates a workspace via `POST /v1/workspaces`, writes `~/.agentstorage/config.json` with `0600` permissions, and verifies the connection via `GET /v1/whoami`.
 
-```
+```bash
 npx agentstorage setup --base <URL> [--name <name>] [--force]
 
 Options:
@@ -32,7 +32,7 @@ Options:
 
 Reads `~/.agentstorage/config.json` and calls `GET /v1/whoami` to show current workspace state, remaining claim window, and available vs. blocked operations.
 
-```
+```bash
 npx agentstorage status
 ```
 
