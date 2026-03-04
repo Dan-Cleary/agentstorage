@@ -1,6 +1,6 @@
 # agentstorage
 
-Zero-install CLI for [AgentStorage](https://github.com/yourusername/agentstorage) — agent onboarding and workspace management.
+Zero-install CLI for [AgentStorage](https://github.com/Dan-Cleary/agentstorage) — agent onboarding and workspace management.
 
 ## Usage
 
