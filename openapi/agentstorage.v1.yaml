@@ -14,6 +14,7 @@ paths:
   /v1/healthz:
     get:
       summary: Health check
+      # checkov:skip=CKV_OPENAPI_5: Intentionally public endpoint
       security: []
       responses:
         "200":
@@ -31,6 +32,7 @@ paths:
   /v1/workspaces:
     post:
       summary: Create workspace
+      # checkov:skip=CKV_OPENAPI_5: Open registration for agent onboarding
       security: []
       requestBody:
         required: false
@@ -198,7 +200,7 @@ paths:
                   properties:
                     permanent:
                       type: boolean
-                      const: true
+                      enum: [true]
                   required: [permanent]
                   additionalProperties: false
                 - type: object
@@ -208,6 +210,8 @@ paths:
                       minimum: 1
                       maximum: 604800
                     permanent:
+                      type: boolean
+                      nullable: true
                       enum: [false, null]
                   required: [expiresInSeconds]
                   additionalProperties: false
