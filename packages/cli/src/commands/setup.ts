@@ -63,14 +63,21 @@ function isWhoamiPayload(value: unknown): value is { workspaceStatus: string } {
 export function parseSetupArgs(argv: string[]): SetupArgs {
   const get = (flag: string) => {
     const i = argv.indexOf(flag);
-    return i !== -1 && i + 1 < argv.length ? argv[i + 1] : undefined;
+    if (i === -1 || i + 1 >= argv.length) return undefined;
+    const value = argv[i + 1];
+    return value.startsWith("--") ? undefined : value;
   };
+  const base = get("--base") ?? process.env.AGENTSTORAGE_URL ?? process.env.CONVEX_URL;
+  const name = get("--name") ?? "default";
+  if (argv.includes("--base") && !get("--base")) {
+    throw new Error("Missing value for --base");
+  }
+  if (argv.includes("--name") && !get("--name")) {
+    throw new Error("Missing value for --name");
+  }
   return {
-    base:
-      get("--base") ??
-      process.env.AGENTSTORAGE_URL ??
-      process.env.CONVEX_URL,
-    name: get("--name") ?? "default",
+    base,
+    name,
     force: argv.includes("--force"),
   };
 }

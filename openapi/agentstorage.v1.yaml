@@ -180,6 +180,12 @@ paths:
                   isDone:
                     type: boolean
                 required: [assets, nextCursor, isDone]
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
   /v1/assets/{assetId}/sign:
     post:
       summary: Create signed download URL (claimed workspaces)
@@ -230,6 +236,12 @@ paths:
                     type: number
                     nullable: true
                 required: [signedUrl]
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "403":
           description: Blocked pre-claim or insufficient permission
           content:
@@ -293,6 +305,12 @@ paths:
                   isDone:
                     type: boolean
                 required: [assets, nextCursor, isDone]
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 components:
   securitySchemes:
     bearerAuth:

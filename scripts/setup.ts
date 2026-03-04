@@ -253,16 +253,16 @@ async function main() {
 
   // ── Step 4: Print capability summary ────────────────────────────────────
 
-  const isUnclaimed = whoami.workspaceStatus === "unclaimed";
+  const workspaceStatus = whoami.workspaceStatus;
+  const isUnclaimed = workspaceStatus === "unclaimed";
+  const isActive = workspaceStatus === "active";
   const expiresAt = new Date(config.expiresAt);
   const daysLeft = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   const expiryStr = expiresAt.toLocaleDateString("en-CA"); // YYYY-MM-DD
+  const statusColor = isActive ? c.green : c.yellow;
 
   console.log("\n  " + label("connected", `${c.green}${baseUrl}${c.reset}`).trimStart());
-  console.log("  " + label("status", isUnclaimed
-    ? `${c.yellow}unclaimed${c.reset}`
-    : `${c.green}active${c.reset}`
-  ).trimStart());
+  console.log("  " + label("status", `${statusColor}${workspaceStatus}${c.reset}`).trimStart());
 
   console.log("\n  " + ok("Available now"));
   console.log(c.gray + "      read · write · list · search · delete (own assets)" + c.reset);
@@ -278,7 +278,7 @@ async function main() {
     );
     console.log(`  ${c.cyan}${created.claimUrl}${c.reset}`);
     console.log(`\n  ${c.gray}Share this URL with a human to activate the workspace.${c.reset}`);
-  } else {
+  } else if (isActive) {
     console.log("\n  " + ok("Full access — workspace is active"));
   }
 
