@@ -244,7 +244,7 @@ export async function runSetup(argv: string[]): Promise<void> {
     console.log(`\n  ${c.bold}👤  Claim URL${c.reset} ${c.gray}(${daysLeft} ${dayLabel} — expires ${expiryStr}):${c.reset}`);
     console.log(`  ${c.cyan}${created.claimUrl}${c.reset}`);
     console.log(`\n  ${c.gray}Share this URL with a human to activate the workspace.${c.reset}`);
-  } else {
+  } else if (isActive) {
     console.log("\n  " + ok("Full access — workspace is active"));
   }
 
